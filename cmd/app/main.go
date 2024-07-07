@@ -5,13 +5,14 @@ import (
 	"github.com/joho/godotenv"
 	"go.uber.org/zap"
 	"os"
+	"time"
 	"wb-weather/internal/repository"
 	"wb-weather/internal/routes"
+	"wb-weather/internal/service"
 	"wb-weather/pkg/logger"
 )
 
 func main() {
-
 	err := godotenv.Load(".env")
 	if err != nil {
 		logger.Fatal("Ошибка загрузки переменных окружения")
@@ -26,6 +27,17 @@ func main() {
 		logger.Fatal("Ошибка подключения к базе данных", zap.Error(err))
 	}
 	defer db.Close()
+
+	ticker := time.NewTicker(3 * time.Hour)
+	go func() {
+		service.InitForecast()
+		for {
+			select {
+			case <-ticker.C:
+				service.InitForecast()
+			}
+		}
+	}()
 
 	router := gin.Default()
 

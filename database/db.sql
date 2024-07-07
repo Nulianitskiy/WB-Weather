@@ -2,8 +2,8 @@ create table place (
     id serial primary key ,
     city varchar(100),
     country varchar(100),
-    latitude decimal(9,6),
-    longitude decimal(9,6)
+    latitude varchar(15),
+    longitude varchar(15)
 );
 
 create table weather (

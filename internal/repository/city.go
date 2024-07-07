@@ -22,3 +22,16 @@ func (d *Database) AddCity(c model.City) (model.City, error) {
 	logger.Info("Город успешно добавлен", zap.Int("id", id))
 	return c, nil
 }
+
+// GetAllCity Получить все города
+func (d *Database) GetAllCity() ([]model.City, error) {
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
+
+	var cities []model.City
+	err := d.db.Select(&cities, "SELECT * FROM place")
+	if err != nil {
+		return nil, err
+	}
+	return cities, nil
+}
