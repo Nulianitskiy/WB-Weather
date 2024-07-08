@@ -1,4 +1,4 @@
-package repository
+package postgresql
 
 import (
 	"fmt"
@@ -7,33 +7,14 @@ import (
 	_ "github.com/lib/pq"
 	"go.uber.org/zap"
 	"os"
-	"sync"
 	"wb-weather/pkg/logger"
 )
 
 type Database struct {
-	db    *sqlx.DB
-	mutex sync.Mutex
+	db *sqlx.DB
 }
 
-var (
-	instance *Database
-	once     sync.Once
-)
-
-func GetInstance() (*Database, error) {
-	var err error
-	once.Do(func() {
-		logger.Info("Создание нового экземпляра Database")
-		instance, err = newDatabase()
-		if err != nil {
-			logger.Fatal("Ошибка создания экземпляра Database", zap.Error(err))
-		}
-	})
-	return instance, err
-}
-
-func newDatabase() (*Database, error) {
+func NewDatabase() (*sqlx.DB, error) {
 	logger.Info("Загрузка файла .env для конфигурации базы данных")
 	err := godotenv.Load()
 	if err != nil {
@@ -63,7 +44,7 @@ func newDatabase() (*Database, error) {
 	}
 	logger.Info("Подключение к базе данных PostgreSQL успешно")
 
-	return &Database{db: db}, nil
+	return db, nil
 }
 
 func (d *Database) Close() error {

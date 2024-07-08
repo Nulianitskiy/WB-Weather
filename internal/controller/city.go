@@ -5,12 +5,25 @@ import (
 	"go.uber.org/zap"
 	"net/http"
 	"wb-weather/internal/model"
-	"wb-weather/internal/repository"
+	"wb-weather/internal/service"
 	"wb-weather/pkg/logger"
 	"wb-weather/pkg/utils"
 )
 
-func AddCity(ctx *gin.Context) {
+type CityController interface {
+	AddCity(ctx *gin.Context)
+	GetAllCity(ctx *gin.Context)
+}
+
+type cityController struct {
+	cityService service.CityService
+}
+
+func NewCityController(cityService service.CityService) CityController {
+	return &cityController{cityService: cityService}
+}
+
+func (cc *cityController) AddCity(ctx *gin.Context) {
 	var c model.City
 	if err := ctx.ShouldBindJSON(&c); err != nil {
 		logger.Error("Ошибка парсинга параметров города", zap.Error(err))
@@ -18,35 +31,12 @@ func AddCity(ctx *gin.Context) {
 		return
 	}
 
-	db, err := repository.GetInstance()
-	if err != nil {
-		logger.Error("Ошибка получения экземпляра базы данных", zap.Error(err))
-		ctx.JSON(http.StatusInternalServerError, utils.ErrorResponse{Error: err.Error()})
-		return
-	}
-
-	c, err = db.AddCity(c)
-	if err != nil {
-		logger.Error("Ошибка при добавлении города", zap.Error(err))
-		ctx.JSON(http.StatusInternalServerError, utils.ErrorResponse{Error: err.Error()})
-		return
-	}
-
-	ctx.JSON(http.StatusOK, c)
+	c, _ = cc.cityService.AddCity(c)
 	logger.Info("Город успешно добавлен")
 }
 
-func GetAllCity(ctx *gin.Context) {
-	var c []model.City
-
-	db, err := repository.GetInstance()
-	if err != nil {
-		logger.Error("Ошибка получения экземпляра базы данных", zap.Error(err))
-		ctx.JSON(http.StatusInternalServerError, utils.ErrorResponse{Error: err.Error()})
-		return
-	}
-
-	c, err = db.GetAllCity()
+func (cc *cityController) GetAllCity(ctx *gin.Context) {
+	c, err := cc.cityService.GetCity()
 	if err != nil {
 		logger.Error("Ошибка при получении списка городов", zap.Error(err))
 		ctx.JSON(http.StatusInternalServerError, utils.ErrorResponse{Error: err.Error()})

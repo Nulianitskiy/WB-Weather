@@ -6,25 +6,31 @@ import (
 	"net/http"
 	"strconv"
 	"wb-weather/internal/model"
-	"wb-weather/internal/repository"
+	"wb-weather/internal/service"
 	"wb-weather/pkg/logger"
 	"wb-weather/pkg/utils"
 )
 
-func GetWeather(ctx *gin.Context) {
+type WeatherController interface {
+	GetWeather(ctx *gin.Context)
+	GetForecast(ctx *gin.Context)
+}
+
+type weatherController struct {
+	weatherService service.WeatherService
+}
+
+func NewWeatherController(controller service.WeatherService) WeatherController {
+	return &weatherController{weatherService: controller}
+}
+
+func (w *weatherController) GetWeather(ctx *gin.Context) {
 	weatherId := ctx.Param("id")
 	wId, _ := strconv.Atoi(weatherId)
 
 	var weather model.JSONBWeather
 
-	db, err := repository.GetInstance()
-	if err != nil {
-		logger.Error("Ошибка получения экземпляра базы данных", zap.Error(err))
-		ctx.JSON(http.StatusInternalServerError, utils.ErrorResponse{Error: err.Error()})
-		return
-	}
-
-	weather, err = db.GetWeather(wId)
+	weather, err := w.weatherService.GetWeatherById(wId)
 	if err != nil {
 		logger.Error("Ошибка при получении списка городов", zap.Error(err))
 		ctx.JSON(http.StatusInternalServerError, utils.ErrorResponse{Error: err.Error()})
@@ -34,20 +40,13 @@ func GetWeather(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, weather)
 }
 
-func GetForecast(ctx *gin.Context) {
+func (w *weatherController) GetForecast(ctx *gin.Context) {
 	cityId := ctx.Param("id")
 	cId, _ := strconv.Atoi(cityId)
 
 	var forecast []model.ResponseWeather
 
-	db, err := repository.GetInstance()
-	if err != nil {
-		logger.Error("Ошибка получения экземпляра базы данных", zap.Error(err))
-		ctx.JSON(http.StatusInternalServerError, utils.ErrorResponse{Error: err.Error()})
-		return
-	}
-
-	forecast, err = db.GetForecast(cId)
+	forecast, err := w.weatherService.GetForecastByCity(cId)
 	if err != nil {
 		logger.Error("Ошибка при получении списка городов", zap.Error(err))
 		ctx.JSON(http.StatusInternalServerError, utils.ErrorResponse{Error: err.Error()})

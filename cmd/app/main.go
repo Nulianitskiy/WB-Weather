@@ -6,44 +6,65 @@ import (
 	"go.uber.org/zap"
 	"os"
 	"time"
+	"wb-weather/internal/controller"
+	"wb-weather/internal/external"
 	"wb-weather/internal/repository"
-	"wb-weather/internal/routes"
 	"wb-weather/internal/service"
+	"wb-weather/pkg/client/postgresql"
 	"wb-weather/pkg/logger"
 )
 
-func main() {
+func init() {
 	err := godotenv.Load(".env")
 	if err != nil {
 		logger.Fatal("Ошибка загрузки переменных окружения")
 	}
+}
+
+// TODO Разгрузить main
+func main() {
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
 
-	db, err := repository.GetInstance()
+	key := os.Getenv("OWM_KEY")
+
+	database, err := postgresql.NewDatabase()
 	if err != nil {
 		logger.Fatal("Ошибка подключения к базе данных", zap.Error(err))
 	}
-	defer db.Close()
+	defer database.Close()
+
+	router := gin.Default()
+
+	cityRepo := repository.NewCityRepo(database)
+	cityService := service.NewCityService(cityRepo)
+	cityController := controller.NewCityController(cityService)
+
+	weatherRepo := repository.NewWeatherRepo(database)
+	weatherExt := external.NewWeatherExternal(key)
+	weatherService := service.NewWeatherService(weatherRepo, cityRepo, weatherExt)
+	weatherController := controller.NewWeatherController(weatherService)
+
+	router.POST("/city", cityController.AddCity)
+	router.GET("/city", cityController.GetAllCity)
+	router.GET("/weather/:id", weatherController.GetWeather)
+	router.GET("/forecast/:id", weatherController.GetForecast)
+
+	logger.Info("Запуск сервера на порту", zap.String("port", port))
 
 	ticker := time.NewTicker(3 * time.Hour)
 	go func() {
-		service.InitForecast()
+		weatherService.UpdateCityWeather()
 		for {
 			select {
 			case <-ticker.C:
-				service.InitForecast()
+				weatherService.UpdateCityWeather()
 			}
 		}
 	}()
 
-	router := gin.Default()
-
-	routes.SetupRoutes(router)
-
-	logger.Info("Запуск сервера на порту", zap.String("port", port))
 	err = router.Run(":" + port)
 	if err != nil {
 		logger.Fatal("Ошибка запуска сервиса", zap.Error(err))

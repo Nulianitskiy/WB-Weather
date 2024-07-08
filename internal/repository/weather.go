@@ -2,39 +2,40 @@ package repository
 
 import (
 	"encoding/json"
+	"github.com/jmoiron/sqlx"
 	"go.uber.org/zap"
 	"wb-weather/internal/model"
 	"wb-weather/pkg/logger"
 )
 
-func (d *Database) GetAllCityWeather(c model.City) ([]model.ResponseWeather, error) {
-	d.mutex.Lock()
-	defer d.mutex.Unlock()
-
-	var weathers []model.ResponseWeather
-	err := d.db.Select(&weathers, "SELECT id, city_id, date, temperature FROM weather WHERE city_id = $1", c.Id)
-	if err != nil {
-		return nil, err
-	}
-	return weathers, nil
+type WeatherRepo interface {
+	UpdateCityWeatherBrute(c model.City, weathers model.WeatherData) error
+	GetWeatherById(weatherId int) (model.JSONBWeather, error)
+	GetForecastByCity(cityId int) ([]model.ResponseWeather, error)
 }
 
-// WeatherUpdateBrute простое решение обновления данных
-func (d *Database) WeatherUpdateBrute(c model.City, weathers model.WeatherData) error {
+type weatherRepo struct {
+	db *sqlx.DB
+}
+
+func NewWeatherRepo(db *sqlx.DB) WeatherRepo {
+	return &weatherRepo{db: db}
+}
+
+// UpdateCityWeatherBrute простое решение обновления данных
+func (w *weatherRepo) UpdateCityWeatherBrute(c model.City, weathers model.WeatherData) error {
 	// Удаляем прошлые данные, добавляем новые
 	// TODO Придумать решение поизящней
-	d.mutex.Lock()
-	defer d.mutex.Unlock()
 
 	var oldWeather []model.ResponseWeather
-	err := d.db.Select(&oldWeather, "SELECT id FROM weather WHERE city_id = $1", c.Id)
+	err := w.db.Select(&oldWeather, "SELECT id FROM weather WHERE city_id = $1", c.Id)
 	if err != nil {
 		return err
 	}
 
 	query := `DELETE FROM weather WHERE id = $1`
 	for _, weather := range oldWeather {
-		_, err := d.db.Exec(query, weather.Id)
+		_, err := w.db.Exec(query, weather.Id)
 		if err != nil {
 			logger.Error("Ошибка при удалении информации о сотруднике", zap.Error(err), zap.Int("id", weather.Id))
 			return err
@@ -48,7 +49,7 @@ func (d *Database) WeatherUpdateBrute(c model.City, weathers model.WeatherData) 
 			logger.Error("Ошибка добавления данных в базу JSON", zap.Error(err))
 			return err
 		}
-		_, err = d.db.Exec(query, c.Id, weather.DtTxt, weather.Main.Temp, string(rawJSON))
+		_, err = w.db.Exec(query, c.Id, weather.DtTxt, weather.Main.Temp, string(rawJSON))
 		if err != nil {
 			logger.Error("Ошибка при добавлении погоды", zap.Error(err))
 			return err
@@ -57,13 +58,10 @@ func (d *Database) WeatherUpdateBrute(c model.City, weathers model.WeatherData) 
 	return nil
 }
 
-func (d *Database) GetWeather(weatherId int) (model.JSONBWeather, error) {
-	d.mutex.Lock()
-	defer d.mutex.Unlock()
-
+func (w *weatherRepo) GetWeatherById(weatherId int) (model.JSONBWeather, error) {
 	var weather model.JSONBWeather
 	var jsonData []byte
-	err := d.db.Get(&jsonData, "SELECT weather_data FROM weather WHERE id = $1", weatherId)
+	err := w.db.Get(&jsonData, "SELECT weather_data FROM weather WHERE id = $1", weatherId)
 	if err != nil {
 		return weather, err
 	}
@@ -76,12 +74,9 @@ func (d *Database) GetWeather(weatherId int) (model.JSONBWeather, error) {
 	return weather, nil
 }
 
-func (d *Database) GetForecast(cityId int) ([]model.ResponseWeather, error) {
-	d.mutex.Lock()
-	defer d.mutex.Unlock()
-
+func (w *weatherRepo) GetForecastByCity(cityId int) ([]model.ResponseWeather, error) {
 	var forecast []model.ResponseWeather
-	err := d.db.Select(&forecast, "SELECT id, city_id, date, temperature FROM weather WHERE city_id = $1", cityId)
+	err := w.db.Select(&forecast, "SELECT id, city_id, date, temperature FROM weather WHERE city_id = $1", cityId)
 	if err != nil {
 		return forecast, err
 	}

@@ -4,6 +4,6 @@ ENV POSTGRES_PASSWORD=caravanpalace \
     POSTGRES_USER=wbuser \
     POSTGRES_DB=wbweather
 
-COPY ./db.sql /docker-entrypoint-initdb.d/db.sql
+COPY migrate.sql /docker-entrypoint-initdb.d/migrate.sql
 
 EXPOSE 5432
