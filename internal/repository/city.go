@@ -29,7 +29,7 @@ func (d *Database) GetAllCity() ([]model.City, error) {
 	defer d.mutex.Unlock()
 
 	var cities []model.City
-	err := d.db.Select(&cities, "SELECT * FROM place")
+	err := d.db.Select(&cities, "SELECT * FROM place ORDER BY city")
 	if err != nil {
 		return nil, err
 	}

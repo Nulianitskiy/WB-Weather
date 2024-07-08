@@ -56,3 +56,34 @@ func (d *Database) WeatherUpdateBrute(c model.City, weathers model.WeatherData) 
 	}
 	return nil
 }
+
+func (d *Database) GetWeather(weatherId int) (model.JSONBWeather, error) {
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
+
+	var weather model.JSONBWeather
+	var jsonData []byte
+	err := d.db.Get(&jsonData, "SELECT weather_data FROM weather WHERE id = $1", weatherId)
+	if err != nil {
+		return weather, err
+	}
+
+	err = json.Unmarshal(jsonData, &weather.Data)
+	if err != nil {
+		return weather, err
+	}
+
+	return weather, nil
+}
+
+func (d *Database) GetForecast(cityId int) ([]model.ResponseWeather, error) {
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
+
+	var forecast []model.ResponseWeather
+	err := d.db.Select(&forecast, "SELECT id, city_id, date, temperature FROM weather WHERE city_id = $1", cityId)
+	if err != nil {
+		return forecast, err
+	}
+	return forecast, nil
+}

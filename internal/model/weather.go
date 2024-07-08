@@ -11,6 +11,10 @@ type WeatherData struct {
 	List []Item `json:"list"`
 }
 
+type JSONBWeather struct {
+	Data map[string]interface{} `db:"weather_data" json:"weather"`
+}
+
 type Coord struct {
 	Lat float64 `json:"lat"`
 	Lon float64 `json:"lon"`

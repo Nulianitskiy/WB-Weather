@@ -35,3 +35,23 @@ func AddCity(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, c)
 	logger.Info("Город успешно добавлен")
 }
+
+func GetAllCity(ctx *gin.Context) {
+	var c []model.City
+
+	db, err := repository.GetInstance()
+	if err != nil {
+		logger.Error("Ошибка получения экземпляра базы данных", zap.Error(err))
+		ctx.JSON(http.StatusInternalServerError, utils.ErrorResponse{Error: err.Error()})
+		return
+	}
+
+	c, err = db.GetAllCity()
+	if err != nil {
+		logger.Error("Ошибка при получении списка городов", zap.Error(err))
+		ctx.JSON(http.StatusInternalServerError, utils.ErrorResponse{Error: err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, c)
+}
