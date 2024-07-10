@@ -23,6 +23,24 @@ func NewCityController(cityService service.CityService, log logger.Logger) CityC
 	return &cityController{cityService: cityService, log: log}
 }
 
+// AddCity
+//
+//	@Summary		Добавление нового города
+//	@Tags			API дополнительных запросов
+//	@Description	Добавление нового города
+//	@Accept			json
+//	@Produce		json
+//
+//	@Param			name		query		string	true	"Название города"	example(Москва)
+//	@Param			country		query		string	true	"Страна"			example(Россия)
+//	@Param			latitude	query		string	true	"Широта"			example(55.7558)
+//	@Param			longitude	query		string	true	"Долгота"			example(37.6176)
+//
+//	@Success		200			{array}		model.City
+//	@Failure		400,404		{object}	utils.ErrorResponse
+//	@Failure		500			{object}	utils.ErrorResponse
+//	@Failure		default		{object}	utils.ErrorResponse
+//	@Router			/city [post]
 func (cc *cityController) AddCity(ctx *gin.Context) {
 	cc.log.Info("Запрос на добавление города")
 	var c model.City
@@ -43,6 +61,19 @@ func (cc *cityController) AddCity(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, c)
 }
 
+// GetAllCity
+//
+//	@Summary		Получить все города
+//	@Tags			Основное API
+//	@Description	Получение списка городов, для которых есть прогноз погоды
+//	@Accept			json
+//	@Produce		json
+//
+//	@Success		200		{object}	model.CityList
+//	@Failure		400,404	{object}	utils.ErrorResponse
+//	@Failure		500		{object}	utils.ErrorResponse
+//	@Failure		default	{object}	utils.ErrorResponse
+//	@Router			/city [get]
 func (cc *cityController) GetAllCity(ctx *gin.Context) {
 	cc.log.Info("Запрос на получение всех городов с предсказанием погоды")
 	cities, err := cc.cityService.GetCities()

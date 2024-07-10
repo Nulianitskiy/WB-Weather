@@ -23,17 +23,33 @@ func NewWeatherController(weatherService service.WeatherService, log logger.Logg
 	return &weatherController{weatherService: weatherService, log: log}
 }
 
+// GetWeather
+//
+//	@Summary		Получить детальную информацию о погоде
+//	@Tags			Основное API
+//	@Description	Получение детальной информации о погоде для конкретного города и даты
+//	@Accept			json
+//	@Produce		json
+//
+//	@Param			city	query		string	true	"Название города"			example(Москва)
+//	@Param			date	query		string	true	"Конкретная дата и время"	example(2024-07-10 18:00:00)
+//
+//	@Success		200		{object}	model.ResponseFullWeather
+//	@Failure		400,404	{object}	utils.ErrorResponse
+//	@Failure		500		{object}	utils.ErrorResponse
+//	@Failure		default	{object}	utils.ErrorResponse
+//	@Router			/weather [get]
 func (w *weatherController) GetWeather(ctx *gin.Context) {
 	cityName := ctx.Query("city")
 	if cityName == "" {
 		w.log.Error("Не указан параметр city")
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "city parameter is required"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Не указан параметр city"})
 		return
 	}
 	date := ctx.Query("date")
 	if date == "" {
 		w.log.Error("Не указан параметр date")
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "date parameter is required"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Не указан параметр date"})
 		return
 	}
 
@@ -49,11 +65,26 @@ func (w *weatherController) GetWeather(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, weather)
 }
 
+// GetForecast
+//
+//	@Summary		Получить предсказание по городу
+//	@Tags			Основное API
+//	@Description	Получение короткой информации о данных погоды для конкретного города
+//	@Accept			json
+//	@Produce		json
+//
+//	@Param			city	query		string	true	"Название города"	example(Москва)
+//
+//	@Success		200		{object}	model.ResponseShortWeatherByCity
+//	@Failure		400,404	{object}	utils.ErrorResponse
+//	@Failure		500		{object}	utils.ErrorResponse
+//	@Failure		default	{object}	utils.ErrorResponse
+//	@Router			/forecast [get]
 func (w *weatherController) GetForecast(ctx *gin.Context) {
 	cityName := ctx.Query("city")
 	if cityName == "" {
 		w.log.Error("Не указан параметр city")
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "city parameter is required"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Не указан параметр city"})
 		return
 	}
 

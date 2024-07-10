@@ -5,17 +5,29 @@ import (
 	"errors"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 	"go.uber.org/zap"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+	_ "wb-weather/docs"
 	"wb-weather/internal/composite"
 	"wb-weather/pkg/client/postgresql"
 	"wb-weather/pkg/logger"
 )
 
+//	@title			Wildberries Weather
+//	@version		1.0
+//	@description	Тестовое задание для команды портала продавцов..
+
+//	@contact.name	Никита Ульяницкий
+//	@contact.url	https://t.me/Nulianitskiy
+
+// @host		localhost:8080
+// @BasePath	/
 func main() {
 	zapLogger := logger.NewZapLogger()
 
@@ -58,6 +70,8 @@ func main() {
 	router.GET("/city", cityComposite.Controller.GetAllCity)
 	router.GET("/weather", weatherComposite.Controller.GetWeather)
 	router.GET("/forecast", weatherComposite.Controller.GetForecast)
+
+	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	zapLogger.Info("Запуск сервера на порту", zap.String("port", port))
 

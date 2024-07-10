@@ -1,0 +1,227 @@
+basePath: /
+definitions:
+  model.City:
+    properties:
+      country:
+        type: string
+      id:
+        type: integer
+      latitude:
+        type: string
+      longitude:
+        type: string
+      name:
+        type: string
+    type: object
+  model.CityList:
+    properties:
+      cities:
+        items:
+          type: string
+        type: array
+    type: object
+  model.ResponseFullWeather:
+    properties:
+      weather:
+        additionalProperties: true
+        type: object
+    type: object
+  model.ResponseShortWeatherByCity:
+    properties:
+      city:
+        type: string
+      country:
+        type: string
+      date:
+        items:
+          type: string
+        type: array
+      temp:
+        type: string
+    type: object
+  utils.ErrorResponse:
+    properties:
+      error:
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact:
+    name: Никита Ульяницкий
+    url: https://t.me/Nulianitskiy
+  description: Тестовое задание для команды портала продавцов..
+  title: Wildberries Weather
+  version: "1.0"
+paths:
+  /city:
+    get:
+      consumes:
+      - application/json
+      description: Получение списка городов, для которых есть прогноз погоды
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.CityList'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        default:
+          description: ""
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      summary: Получить все города
+      tags:
+      - Основное API
+    post:
+      consumes:
+      - application/json
+      description: Добавление нового города
+      parameters:
+      - description: Название города
+        example: Москва
+        in: query
+        name: name
+        required: true
+        type: string
+      - description: Страна
+        example: Россия
+        in: query
+        name: country
+        required: true
+        type: string
+      - description: Широта
+        example: "55.7558"
+        in: query
+        name: latitude
+        required: true
+        type: string
+      - description: Долгота
+        example: "37.6176"
+        in: query
+        name: longitude
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/model.City'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        default:
+          description: ""
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      summary: Добавление нового города
+      tags:
+      - API дополнительных запросов
+  /forecast:
+    get:
+      consumes:
+      - application/json
+      description: Получение короткой информации о данных погоды для конкретного города
+      parameters:
+      - description: Название города
+        example: Москва
+        in: query
+        name: city
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.ResponseShortWeatherByCity'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        default:
+          description: ""
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      summary: Получить предсказание по городу
+      tags:
+      - Основное API
+  /weather:
+    get:
+      consumes:
+      - application/json
+      description: Получение детальной информации о погоде для конкретного города
+        и даты
+      parameters:
+      - description: Название города
+        example: Москва
+        in: query
+        name: city
+        required: true
+        type: string
+      - description: Конкретная дата и время
+        example: "2024-07-10 18:00:00"
+        in: query
+        name: date
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.ResponseFullWeather'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        default:
+          description: ""
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      summary: Получить детальную информацию о погоде
+      tags:
+      - Основное API
+swagger: "2.0"
