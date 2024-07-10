@@ -7,13 +7,11 @@ import (
 	"os"
 )
 
-var zapLog *zap.Logger
-
-func init() {
-	zapLog = CreateLogger()
+type ZapLogger struct {
+	logger *zap.Logger
 }
 
-func CreateLogger() *zap.Logger {
+func NewZapLogger() Logger {
 	stdout := zapcore.AddSync(os.Stdout)
 
 	file := zapcore.AddSync(&lumberjack.Logger{
@@ -40,21 +38,38 @@ func CreateLogger() *zap.Logger {
 		zapcore.NewCore(fileEncoder, file, level),
 	)
 
-	return zap.New(core)
+	return &ZapLogger{logger: zap.New(core)}
 }
 
-func Info(message string, fields ...zap.Field) {
-	zapLog.Info(message, fields...)
+func (z *ZapLogger) Info(message string, args ...interface{}) {
+	z.logger.Info(message, toZapFields(args...)...)
 }
 
-func Debug(message string, fields ...zap.Field) {
-	zapLog.Debug(message, fields...)
+func (z *ZapLogger) Debug(message string, args ...interface{}) {
+	z.logger.Debug(message, toZapFields(args...)...)
 }
 
-func Error(message string, fields ...zap.Field) {
-	zapLog.Error(message, fields...)
+func (z *ZapLogger) Error(message string, args ...interface{}) {
+	z.logger.Error(message, toZapFields(args...)...)
 }
 
-func Fatal(message string, fields ...zap.Field) {
-	zapLog.Fatal(message, fields...)
+func (z *ZapLogger) Fatal(message string, args ...interface{}) {
+	z.logger.Fatal(message, toZapFields(args...)...)
+}
+
+func toZapFields(args ...interface{}) []zap.Field {
+	fields := make([]zap.Field, 0, len(args))
+	for _, arg := range args {
+		switch v := arg.(type) {
+		case zap.Field:
+			fields = append(fields, v)
+		case string:
+			fields = append(fields, zap.String("msg", v))
+		case int:
+			fields = append(fields, zap.Int("num", v))
+		default:
+			fields = append(fields, zap.Any("unknown", v))
+		}
+	}
+	return fields
 }

@@ -1,29 +1,29 @@
 package main
 
 import (
-	"fmt"
+	"context"
+	"errors"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	"go.uber.org/zap"
+	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
-	"wb-weather/internal/controller"
-	"wb-weather/internal/external"
-	"wb-weather/internal/repository"
-	"wb-weather/internal/service"
+	"wb-weather/internal/composite"
 	"wb-weather/pkg/client/postgresql"
 	"wb-weather/pkg/logger"
 )
 
-func init() {
+func main() {
+	zapLogger := logger.NewZapLogger()
+
 	err := godotenv.Load(".env")
 	if err != nil {
-		logger.Fatal("Ошибка загрузки переменных окружения")
+		zapLogger.Fatal("Ошибка загрузки переменных окружения", zap.Error(err))
 	}
-}
 
-// TODO Разгрузить main
-func main() {
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
@@ -39,50 +39,69 @@ func main() {
 
 	database, err := postgresql.NewDatabase(dbUser, dbPassword, dbHost, dbPort, dbName)
 	if err != nil {
-		logger.Fatal("Ошибка подключения к базе данных", zap.Error(err))
+		zapLogger.Fatal("Ошибка подключения к базе данных", zap.Error(err))
 	}
 	defer database.Close()
 
 	router := gin.Default()
 
-	cityRepo := repository.NewCityRepo(database)
-	cityService := service.NewCityService(cityRepo)
-	cityController := controller.NewCityController(cityService)
+	cityComposite, err := composite.NewCityComposite(database, zapLogger)
+	if err != nil {
+		zapLogger.Fatal("Ошибка инициализации CityComposite", zap.Error(err))
+	}
+	weatherComposite, err := composite.NewWeatherComposite(database, zapLogger, key)
+	if err != nil {
+		zapLogger.Fatal("Ошибка инициализации WeatherComposite", zap.Error(err))
+	}
 
-	weatherRepo := repository.NewWeatherRepo(database)
-	weatherExt := external.NewWeatherExternal(key)
-	weatherService := service.NewWeatherService(weatherRepo, cityRepo, weatherExt)
-	weatherController := controller.NewWeatherController(weatherService)
+	router.POST("/city", cityComposite.Controller.AddCity)
+	router.GET("/city", cityComposite.Controller.GetAllCity)
+	router.GET("/weather", weatherComposite.Controller.GetWeather)
+	router.GET("/forecast", weatherComposite.Controller.GetForecast)
 
-	router.POST("/city", cityController.AddCity)
-	router.GET("/city", cityController.GetAllCity)
-	router.GET("/weather", weatherController.GetWeather)
-	router.GET("/forecast", weatherController.GetForecast)
-
-	logger.Info("Запуск сервера на порту", zap.String("port", port))
+	zapLogger.Info("Запуск сервера на порту", zap.String("port", port))
 
 	ticker := time.NewTicker(3 * time.Hour)
 	go func() {
-		err := weatherService.UpdateCityWeather()
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
 		for {
 			select {
 			case <-ticker.C:
-				err := weatherService.UpdateCityWeather()
+				err := weatherComposite.Service.UpdateCityWeather()
 				if err != nil {
-					fmt.Println(err)
-					return
+					zapLogger.Error("Ошибка при обновлении погоды", zap.Error(err))
+				} else {
+					zapLogger.Info("Погода успешно обновлена по расписанию")
 				}
 			}
 		}
 	}()
 
-	err = router.Run(":" + port)
-	if err != nil {
-		logger.Fatal("Ошибка запуска сервиса", zap.Error(err))
+	srv := &http.Server{
+		Addr:    ":" + port,
+		Handler: router.Handler(),
 	}
 
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			zapLogger.Fatal("Ошибка прослушивания: ", zap.Error(err))
+		}
+	}()
+
+	// Обработка завершения приложения
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+	<-quit
+	zapLogger.Info("Получен сигнал завершения приложения")
+
+	// Остановка сервера
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		zapLogger.Fatal("Ошибка при остановке сервера", zap.Error(err))
+	}
+	select {
+	case <-ctx.Done():
+		zapLogger.Info("Таймаут на 5 секунд.")
+	}
+	zapLogger.Info("Сервер успешно остановлен")
 }

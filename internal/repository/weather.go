@@ -2,9 +2,7 @@ package repository
 
 import (
 	"encoding/json"
-	"fmt"
 	"github.com/jmoiron/sqlx"
-	"go.uber.org/zap"
 	"time"
 	"wb-weather/internal/model"
 	"wb-weather/pkg/logger"
@@ -17,44 +15,46 @@ type WeatherRepo interface {
 }
 
 type weatherRepo struct {
-	db *sqlx.DB
+	db  *sqlx.DB
+	log logger.Logger
 }
 
-func NewWeatherRepo(db *sqlx.DB) WeatherRepo {
-	return &weatherRepo{db: db}
+func NewWeatherRepo(db *sqlx.DB, log logger.Logger) WeatherRepo {
+	return &weatherRepo{db: db, log: log}
 }
 
 func (w *weatherRepo) UpdateCityWeather(c model.City, weathers []model.Weather) error {
+	w.log.Info("Начало обновления погоды для города", "city", c.Name)
+
 	tx, err := w.db.Begin()
 	if err != nil {
-		logger.Error("Ошибка начала транзакции", zap.Error(err))
+		w.log.Error("Ошибка начала транзакции", "error", err)
 		return err
 	}
 
 	defer func() {
 		if err != nil {
 			if rollbackErr := tx.Rollback(); rollbackErr != nil {
-				logger.Error("Ошибка отката транзакции", zap.Error(rollbackErr))
+				w.log.Error("Ошибка отката транзакции", "error", rollbackErr)
 			}
-			logger.Error("Транзакция не выполнена", zap.Error(err))
+			w.log.Error("Транзакция не выполнена", "error", err)
 		} else {
 			if commitErr := tx.Commit(); commitErr != nil {
-				logger.Error("Ошибка фиксации транзакции", zap.Error(commitErr))
+				w.log.Error("Ошибка фиксации транзакции", "error", commitErr)
 				err = commitErr
 			}
 		}
 	}()
 
-	// Формируем текущее время для удаления старых записей
 	currentTime := time.Now().Format("2006-01-02 15:04:05")
 	deleteQuery := `DELETE FROM weather WHERE city_id = $1 AND date < $2`
 	result, err := tx.Exec(deleteQuery, c.Id, currentTime)
 	if err != nil {
-		logger.Error("Ошибка при удалении старых записей", zap.Error(err))
+		w.log.Error("Ошибка при удалении старых записей", "error", err)
 		return err
 	}
 	rowsDeleted, _ := result.RowsAffected()
-	logger.Info(fmt.Sprintf("Удалено старых записей для города %s: %d", c.Name, rowsDeleted))
+	w.log.Info("Удалено старых записей", "city", c.Name, "count", rowsDeleted)
 
 	upsertQuery := `
 		INSERT INTO weather (city_id, date, temperature, weather_data)
@@ -67,27 +67,27 @@ func (w *weatherRepo) UpdateCityWeather(c model.City, weathers []model.Weather) 
 	for _, weather := range weathers {
 		_, err = tx.Exec(upsertQuery, c.Id, weather.Date, weather.Temp, weather.WeatherData)
 		if err != nil {
-			logger.Error("Ошибка при добавлении погоды", zap.Error(err))
+			w.log.Error("Ошибка при добавлении погоды", "error", err)
 			return err
 		}
 	}
 
-	// Сброс последовательности после выполнения вставки
 	sequenceResetQuery := `
 		SELECT setval(pg_get_serial_sequence('weather', 'id'), coalesce(max(id), 1))
 		FROM weather;
 	`
 	_, err = tx.Exec(sequenceResetQuery)
 	if err != nil {
-		logger.Error("Ошибка сброса последовательности", zap.Error(err))
+		w.log.Error("Ошибка сброса последовательности", "error", err)
 		return err
 	}
 
-	logger.Info(fmt.Sprintf("Погода успешно обновлена для города %s", c.Name))
+	w.log.Info("Погода успешно обновлена для города", "city", c.Name)
 	return nil
 }
 
 func (w *weatherRepo) GetWeatherByCityAndDate(city, date string) (model.ResponseFullWeather, error) {
+	w.log.Info("Запрос на получение погоды по городу и дате", "city", city, "date", date)
 	var weather model.ResponseFullWeather
 
 	query := `
@@ -105,25 +105,29 @@ func (w *weatherRepo) GetWeatherByCityAndDate(city, date string) (model.Response
 	var weatherData []byte
 	err := w.db.Get(&weatherData, query, city, date)
 	if err != nil {
+		w.log.Error("Ошибка при получении погоды по городу и дате", "error", err)
 		return weather, err
 	}
 
 	err = json.Unmarshal(weatherData, &weather.WeatherData)
 	if err != nil {
+		w.log.Error("Ошибка при разборе данных погоды", "error", err)
 		return weather, err
 	}
 
+	w.log.Info("Погода успешно получена", "city", city, "date", date)
 	return weather, nil
 }
 
 func (w *weatherRepo) GetForecastByCity(city string) (model.ResponseShortWeatherByCity, error) {
+	w.log.Info("Запрос на получение прогноза погоды по городу", "city", city)
 	var weather model.ResponseShortWeatherByCity
 
 	query := `
 		SELECT 
 			c.name,
 			c.country,
-			ROUND(AVG(w.temperature),2) AS temp
+			ROUND(AVG(w.temperature), 2) AS temp
 		FROM 
 			city c
 		JOIN 
@@ -136,6 +140,7 @@ func (w *weatherRepo) GetForecastByCity(city string) (model.ResponseShortWeather
 
 	err := w.db.Get(&weather, query, city)
 	if err != nil {
+		w.log.Error("Ошибка при получении прогноза погоды по городу", "error", err)
 		return weather, err
 	}
 
@@ -148,10 +153,11 @@ func (w *weatherRepo) GetForecastByCity(city string) (model.ResponseShortWeather
 	`
 	err = w.db.Select(&dates, query, city)
 	if err != nil {
+		w.log.Error("Ошибка при получении дат прогноза погоды", "error", err)
 		return weather, err
 	}
-	fmt.Println(dates)
 	weather.Date = dates
 
+	w.log.Info("Прогноз погоды успешно получен", "city", city)
 	return weather, nil
 }
