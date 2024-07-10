@@ -1,6 +1,7 @@
 package service
 
 import (
+	"fmt"
 	"go.uber.org/zap"
 	"wb-weather/internal/external"
 	"wb-weather/internal/model"
@@ -31,20 +32,37 @@ func (s *weatherService) UpdateCityWeather() error {
 		return err
 	}
 
-	// TODO распараллелить
+	errCh := make(chan error)
+	doneCh := make(chan struct{})
+
 	for _, city := range cities {
-		weatherData, err := s.ext.FetchForecast(city.Latitude, city.Longitude)
-		if err != nil {
-			logger.Error("Ошибка получения экземпляра базы данных", zap.Error(err))
-			return err
-		}
-		err = s.wRepo.UpdateCityWeather(city, weatherData)
-		if err != nil {
-			logger.Error("Ошибка получения экземпляра базы данных", zap.Error(err))
-			return err
-		}
+		go updateSingleCityWeather(s, city, errCh)
 	}
+
+	go func() {
+		defer close(doneCh)
+		for range cities {
+			if err := <-errCh; err != nil {
+				logger.Error(err.Error())
+			}
+		}
+	}()
+	<-doneCh
 	return nil
+}
+
+func updateSingleCityWeather(s *weatherService, city model.City, errCh chan<- error) {
+	weatherData, err := s.ext.FetchForecast(city.Latitude, city.Longitude)
+	if err != nil {
+		errCh <- fmt.Errorf("ошибка получения прогноза для города %s: %w", city.Name, err)
+		return
+	}
+	err = s.wRepo.UpdateCityWeather(city, weatherData)
+	if err != nil {
+		errCh <- fmt.Errorf("ошибка обновления погоды для города %s: %w", city.Name, err)
+		return
+	}
+	errCh <- nil
 }
 
 func (s *weatherService) GetWeather(city, date string) (model.ResponseFullWeather, error) {

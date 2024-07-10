@@ -25,15 +25,36 @@ func NewWeatherRepo(db *sqlx.DB) WeatherRepo {
 }
 
 func (w *weatherRepo) UpdateCityWeather(c model.City, weathers []model.Weather) error {
+	tx, err := w.db.Begin()
+	if err != nil {
+		logger.Error("Ошибка начала транзакции", zap.Error(err))
+		return err
+	}
+
+	defer func() {
+		if err != nil {
+			if rollbackErr := tx.Rollback(); rollbackErr != nil {
+				logger.Error("Ошибка отката транзакции", zap.Error(rollbackErr))
+			}
+			logger.Error("Транзакция не выполнена", zap.Error(err))
+		} else {
+			if commitErr := tx.Commit(); commitErr != nil {
+				logger.Error("Ошибка фиксации транзакции", zap.Error(commitErr))
+				err = commitErr
+			}
+		}
+	}()
+
+	// Формируем текущее время для удаления старых записей
 	currentTime := time.Now().Format("2006-01-02 15:04:05")
 	deleteQuery := `DELETE FROM weather WHERE city_id = $1 AND date < $2`
-	result, err := w.db.Exec(deleteQuery, c.Id, currentTime)
+	result, err := tx.Exec(deleteQuery, c.Id, currentTime)
 	if err != nil {
 		logger.Error("Ошибка при удалении старых записей", zap.Error(err))
 		return err
 	}
 	rowsDeleted, _ := result.RowsAffected()
-	logger.Info(fmt.Sprintf("Удалено старых записей: %d", rowsDeleted))
+	logger.Info(fmt.Sprintf("Удалено старых записей для города %s: %d", c.Name, rowsDeleted))
 
 	upsertQuery := `
 		INSERT INTO weather (city_id, date, temperature, weather_data)
@@ -44,14 +65,25 @@ func (w *weatherRepo) UpdateCityWeather(c model.City, weathers []model.Weather) 
 	`
 
 	for _, weather := range weathers {
-		_, err = w.db.Exec(upsertQuery, c.Id, weather.Date, weather.Temp, weather.WeatherData)
+		_, err = tx.Exec(upsertQuery, c.Id, weather.Date, weather.Temp, weather.WeatherData)
 		if err != nil {
 			logger.Error("Ошибка при добавлении погоды", zap.Error(err))
 			return err
 		}
 	}
 
-	logger.Info("Погода успешно обновлена")
+	// Сброс последовательности после выполнения вставки
+	sequenceResetQuery := `
+		SELECT setval(pg_get_serial_sequence('weather', 'id'), coalesce(max(id), 1))
+		FROM weather;
+	`
+	_, err = tx.Exec(sequenceResetQuery)
+	if err != nil {
+		logger.Error("Ошибка сброса последовательности", zap.Error(err))
+		return err
+	}
+
+	logger.Info(fmt.Sprintf("Погода успешно обновлена для города %s", c.Name))
 	return nil
 }
 
