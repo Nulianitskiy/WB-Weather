@@ -10,8 +10,8 @@ import (
 
 type WeatherService interface {
 	UpdateCityWeather() error
-	GetWeatherById(weatherId int) (model.JSONBWeather, error)
-	GetForecastByCity(cityId int) ([]model.ResponseWeather, error)
+	GetWeather(city, date string) (model.ResponseFullWeather, error)
+	GetForecast(city string) (model.ResponseShortWeatherByCity, error)
 }
 
 type weatherService struct {
@@ -25,19 +25,20 @@ func NewWeatherService(wRepo repository.WeatherRepo, cRepo repository.CityRepo, 
 }
 
 func (s *weatherService) UpdateCityWeather() error {
-	cities, err := s.cRepo.GetAllCity()
+	cities, err := s.cRepo.GetAllCities()
 	if err != nil {
 		logger.Error("Ошибка получения городов из бд", zap.Error(err))
 		return err
 	}
 
+	// TODO распараллелить
 	for _, city := range cities {
 		weatherData, err := s.ext.FetchForecast(city.Latitude, city.Longitude)
 		if err != nil {
 			logger.Error("Ошибка получения экземпляра базы данных", zap.Error(err))
 			return err
 		}
-		err = s.wRepo.UpdateCityWeatherBrute(city, *weatherData)
+		err = s.wRepo.UpdateCityWeather(city, weatherData)
 		if err != nil {
 			logger.Error("Ошибка получения экземпляра базы данных", zap.Error(err))
 			return err
@@ -46,10 +47,10 @@ func (s *weatherService) UpdateCityWeather() error {
 	return nil
 }
 
-func (s *weatherService) GetWeatherById(weatherId int) (model.JSONBWeather, error) {
-	return s.wRepo.GetWeatherById(weatherId)
+func (s *weatherService) GetWeather(city, date string) (model.ResponseFullWeather, error) {
+	return s.wRepo.GetWeatherByCityAndDate(city, date)
 }
 
-func (s *weatherService) GetForecastByCity(cityId int) ([]model.ResponseWeather, error) {
-	return s.wRepo.GetForecastByCity(cityId)
+func (s *weatherService) GetForecast(city string) (model.ResponseShortWeatherByCity, error) {
+	return s.wRepo.GetForecastByCity(city)
 }

@@ -8,7 +8,7 @@ import (
 )
 
 type WeatherExternal interface {
-	FetchForecast(lat, lon string) (*model.WeatherData, error)
+	FetchForecast(lat, lon string) ([]model.Weather, error)
 }
 
 type weatherExternal struct {
@@ -19,7 +19,7 @@ func NewWeatherExternal(key string) WeatherExternal {
 	return &weatherExternal{apiKey: key}
 }
 
-func (w *weatherExternal) FetchForecast(lat, lon string) (*model.WeatherData, error) {
+func (w *weatherExternal) FetchForecast(lat, lon string) ([]model.Weather, error) {
 	apiUrl := fmt.Sprintf("https://api.openweathermap.org/data/2.5/forecast?lat=%s&lon=%s&units=metric&appid=%s", lat, lon, w.apiKey)
 
 	resp, err := http.Get(apiUrl)
@@ -28,10 +28,21 @@ func (w *weatherExternal) FetchForecast(lat, lon string) (*model.WeatherData, er
 	}
 	defer resp.Body.Close()
 
-	var weather model.WeatherData
-	if err := json.NewDecoder(resp.Body).Decode(&weather); err != nil {
+	var apiResp model.WeatherAPIResponse
+	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
 		return nil, err
 	}
 
-	return &weather, nil
+	var weathers []model.Weather
+	for _, item := range apiResp.List {
+		data, _ := json.Marshal(item)
+		weather := model.Weather{
+			Temp:        item.Main.Temp,
+			Date:        item.DtTxt,
+			WeatherData: data,
+		}
+		weathers = append(weathers, weather)
+	}
+
+	return weathers, nil
 }

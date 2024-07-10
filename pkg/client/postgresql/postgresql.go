@@ -3,10 +3,8 @@ package postgresql
 import (
 	"fmt"
 	"github.com/jmoiron/sqlx"
-	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	"go.uber.org/zap"
-	"os"
 	"wb-weather/pkg/logger"
 )
 
@@ -14,20 +12,8 @@ type Database struct {
 	db *sqlx.DB
 }
 
-func NewDatabase() (*sqlx.DB, error) {
-	logger.Info("Загрузка файла .env для конфигурации базы данных")
-	err := godotenv.Load()
-	if err != nil {
-		logger.Fatal("Ошибка загрузки файла .env", zap.Error(err))
-	}
-
-	dbUser := os.Getenv("POSTGRES_USER")
-	dbPassword := os.Getenv("POSTGRES_PASSWORD")
-	dbHost := os.Getenv("POSTGRES_HOST")
-	dbPort := os.Getenv("POSTGRES_PORT")
-	dbName := os.Getenv("POSTGRES_DB")
-
-	connectionString := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable", dbUser, dbPassword, dbHost, dbPort, dbName)
+func NewDatabase(user, password, host, port, dbName string) (*sqlx.DB, error) {
+	connectionString := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable", user, password, host, port, dbName)
 
 	logger.Debug("Строка подключения к базе данных сформирована", zap.String("connectionString", connectionString))
 

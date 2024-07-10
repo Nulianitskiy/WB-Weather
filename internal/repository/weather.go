@@ -2,16 +2,18 @@ package repository
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/jmoiron/sqlx"
 	"go.uber.org/zap"
+	"time"
 	"wb-weather/internal/model"
 	"wb-weather/pkg/logger"
 )
 
 type WeatherRepo interface {
-	UpdateCityWeatherBrute(c model.City, weathers model.WeatherData) error
-	GetWeatherById(weatherId int) (model.JSONBWeather, error)
-	GetForecastByCity(cityId int) ([]model.ResponseWeather, error)
+	UpdateCityWeather(c model.City, weathers []model.Weather) error
+	GetWeatherByCityAndDate(city, date string) (model.ResponseFullWeather, error)
+	GetForecastByCity(city string) (model.ResponseShortWeatherByCity, error)
 }
 
 type weatherRepo struct {
@@ -22,51 +24,59 @@ func NewWeatherRepo(db *sqlx.DB) WeatherRepo {
 	return &weatherRepo{db: db}
 }
 
-// UpdateCityWeatherBrute простое решение обновления данных
-func (w *weatherRepo) UpdateCityWeatherBrute(c model.City, weathers model.WeatherData) error {
-	// Удаляем прошлые данные, добавляем новые
-	// TODO Придумать решение поизящней
-
-	var oldWeather []model.ResponseWeather
-	err := w.db.Select(&oldWeather, "SELECT id FROM weather WHERE city_id = $1", c.Id)
+func (w *weatherRepo) UpdateCityWeather(c model.City, weathers []model.Weather) error {
+	currentTime := time.Now().Format("2006-01-02 15:04:05")
+	deleteQuery := `DELETE FROM weather WHERE city_id = $1 AND date < $2`
+	result, err := w.db.Exec(deleteQuery, c.Id, currentTime)
 	if err != nil {
+		logger.Error("Ошибка при удалении старых записей", zap.Error(err))
 		return err
 	}
+	rowsDeleted, _ := result.RowsAffected()
+	logger.Info(fmt.Sprintf("Удалено старых записей: %d", rowsDeleted))
 
-	query := `DELETE FROM weather WHERE id = $1`
-	for _, weather := range oldWeather {
-		_, err := w.db.Exec(query, weather.Id)
-		if err != nil {
-			logger.Error("Ошибка при удалении информации о сотруднике", zap.Error(err), zap.Int("id", weather.Id))
-			return err
-		}
-	}
+	upsertQuery := `
+		INSERT INTO weather (city_id, date, temperature, weather_data)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (city_id, date) DO UPDATE SET
+		temperature = EXCLUDED.temperature,
+		weather_data = EXCLUDED.weather_data;
+	`
 
-	query = `INSERT INTO weather (city_id, date, temperature, weather_data) VALUES ($1, $2, $3, $4)`
-	for _, weather := range weathers.List {
-		rawJSON, err := json.Marshal(weather)
-		if err != nil {
-			logger.Error("Ошибка добавления данных в базу JSON", zap.Error(err))
-			return err
-		}
-		_, err = w.db.Exec(query, c.Id, weather.DtTxt, weather.Main.Temp, string(rawJSON))
+	for _, weather := range weathers {
+		_, err = w.db.Exec(upsertQuery, c.Id, weather.Date, weather.Temp, weather.WeatherData)
 		if err != nil {
 			logger.Error("Ошибка при добавлении погоды", zap.Error(err))
 			return err
 		}
 	}
+
+	logger.Info("Погода успешно обновлена")
 	return nil
 }
 
-func (w *weatherRepo) GetWeatherById(weatherId int) (model.JSONBWeather, error) {
-	var weather model.JSONBWeather
-	var jsonData []byte
-	err := w.db.Get(&jsonData, "SELECT weather_data FROM weather WHERE id = $1", weatherId)
+func (w *weatherRepo) GetWeatherByCityAndDate(city, date string) (model.ResponseFullWeather, error) {
+	var weather model.ResponseFullWeather
+
+	query := `
+		SELECT 
+			w.weather_data
+		FROM 
+			city c
+		JOIN 
+			weather w ON c.id = w.city_id
+		WHERE 
+			c.name = $1
+			AND w.date::text = $2;
+	`
+
+	var weatherData []byte
+	err := w.db.Get(&weatherData, query, city, date)
 	if err != nil {
 		return weather, err
 	}
 
-	err = json.Unmarshal(jsonData, &weather.Data)
+	err = json.Unmarshal(weatherData, &weather.WeatherData)
 	if err != nil {
 		return weather, err
 	}
@@ -74,11 +84,42 @@ func (w *weatherRepo) GetWeatherById(weatherId int) (model.JSONBWeather, error) 
 	return weather, nil
 }
 
-func (w *weatherRepo) GetForecastByCity(cityId int) ([]model.ResponseWeather, error) {
-	var forecast []model.ResponseWeather
-	err := w.db.Select(&forecast, "SELECT id, city_id, date, temperature FROM weather WHERE city_id = $1", cityId)
+func (w *weatherRepo) GetForecastByCity(city string) (model.ResponseShortWeatherByCity, error) {
+	var weather model.ResponseShortWeatherByCity
+
+	query := `
+		SELECT 
+			c.name,
+			c.country,
+			ROUND(AVG(w.temperature),2) AS temp
+		FROM 
+			city c
+		JOIN 
+			weather w ON c.id = w.city_id
+		WHERE 
+			c.name = $1
+		GROUP BY 
+			c.id;
+	`
+
+	err := w.db.Get(&weather, query, city)
 	if err != nil {
-		return forecast, err
+		return weather, err
 	}
-	return forecast, nil
+
+	var dates []string
+	query = `
+		SELECT DISTINCT date::text 
+        FROM weather 
+        WHERE city_id = (SELECT id FROM city WHERE name = $1)
+		ORDER BY date
+	`
+	err = w.db.Select(&dates, query, city)
+	if err != nil {
+		return weather, err
+	}
+	fmt.Println(dates)
+	weather.Date = dates
+
+	return weather, nil
 }

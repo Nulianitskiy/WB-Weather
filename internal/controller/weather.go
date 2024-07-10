@@ -4,7 +4,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 	"net/http"
-	"strconv"
 	"wb-weather/internal/model"
 	"wb-weather/internal/service"
 	"wb-weather/pkg/logger"
@@ -25,14 +24,21 @@ func NewWeatherController(controller service.WeatherService) WeatherController {
 }
 
 func (w *weatherController) GetWeather(ctx *gin.Context) {
-	weatherId := ctx.Param("id")
-	wId, _ := strconv.Atoi(weatherId)
+	cityName := ctx.Query("city")
+	if cityName == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "city parameter is required"})
+		return
+	}
+	date := ctx.Query("date")
+	if date == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "date parameter is required"})
+		return
+	}
 
-	var weather model.JSONBWeather
-
-	weather, err := w.weatherService.GetWeatherById(wId)
+	var weather model.ResponseFullWeather
+	weather, err := w.weatherService.GetWeather(cityName, date)
 	if err != nil {
-		logger.Error("Ошибка при получении списка городов", zap.Error(err))
+		logger.Error("Ошибка при получении полной погоды", zap.Error(err))
 		ctx.JSON(http.StatusInternalServerError, utils.ErrorResponse{Error: err.Error()})
 		return
 	}
@@ -41,14 +47,15 @@ func (w *weatherController) GetWeather(ctx *gin.Context) {
 }
 
 func (w *weatherController) GetForecast(ctx *gin.Context) {
-	cityId := ctx.Param("id")
-	cId, _ := strconv.Atoi(cityId)
+	cityName := ctx.Query("city")
+	if cityName == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "city parameter is required"})
+		return
+	}
 
-	var forecast []model.ResponseWeather
-
-	forecast, err := w.weatherService.GetForecastByCity(cId)
+	forecast, err := w.weatherService.GetForecast(cityName)
 	if err != nil {
-		logger.Error("Ошибка при получении списка городов", zap.Error(err))
+		logger.Error("Ошибка при получении информации по городу", zap.Error(err))
 		ctx.JSON(http.StatusInternalServerError, utils.ErrorResponse{Error: err.Error()})
 		return
 	}

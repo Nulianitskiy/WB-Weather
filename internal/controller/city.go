@@ -36,7 +36,7 @@ func (cc *cityController) AddCity(ctx *gin.Context) {
 }
 
 func (cc *cityController) GetAllCity(ctx *gin.Context) {
-	c, err := cc.cityService.GetCity()
+	c, err := cc.cityService.GetCities()
 	if err != nil {
 		logger.Error("Ошибка при получении списка городов", zap.Error(err))
 		ctx.JSON(http.StatusInternalServerError, utils.ErrorResponse{Error: err.Error()})

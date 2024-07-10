@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	"go.uber.org/zap"
@@ -30,7 +31,13 @@ func main() {
 
 	key := os.Getenv("OWM_KEY")
 
-	database, err := postgresql.NewDatabase()
+	dbUser := os.Getenv("POSTGRES_USER")
+	dbPassword := os.Getenv("POSTGRES_PASSWORD")
+	dbHost := os.Getenv("POSTGRES_HOST")
+	dbPort := os.Getenv("POSTGRES_PORT")
+	dbName := os.Getenv("POSTGRES_DB")
+
+	database, err := postgresql.NewDatabase(dbUser, dbPassword, dbHost, dbPort, dbName)
 	if err != nil {
 		logger.Fatal("Ошибка подключения к базе данных", zap.Error(err))
 	}
@@ -49,18 +56,26 @@ func main() {
 
 	router.POST("/city", cityController.AddCity)
 	router.GET("/city", cityController.GetAllCity)
-	router.GET("/weather/:id", weatherController.GetWeather)
-	router.GET("/forecast/:id", weatherController.GetForecast)
+	router.GET("/weather", weatherController.GetWeather)
+	router.GET("/forecast", weatherController.GetForecast)
 
 	logger.Info("Запуск сервера на порту", zap.String("port", port))
 
 	ticker := time.NewTicker(3 * time.Hour)
 	go func() {
-		weatherService.UpdateCityWeather()
+		err := weatherService.UpdateCityWeather()
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
 		for {
 			select {
 			case <-ticker.C:
-				weatherService.UpdateCityWeather()
+				err := weatherService.UpdateCityWeather()
+				if err != nil {
+					fmt.Println(err)
+					return
+				}
 			}
 		}
 	}()

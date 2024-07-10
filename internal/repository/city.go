@@ -9,7 +9,8 @@ import (
 
 type CityRepo interface {
 	AddCity(c model.City) (model.City, error)
-	GetAllCity() ([]model.City, error)
+	GetAllCitiesWithForecast() (model.CityList, error)
+	GetAllCities() ([]model.City, error)
 }
 
 type cityRepo struct {
@@ -22,9 +23,9 @@ func NewCityRepo(db *sqlx.DB) CityRepo {
 
 // AddCity добавление города
 func (r *cityRepo) AddCity(c model.City) (model.City, error) {
-	query := `INSERT INTO place (city, country, latitude, longitude) VALUES ($1, $2, $3, $4) RETURNING id`
+	query := `INSERT INTO city (name, country, latitude, longitude) VALUES ($1, $2, $3, $4) RETURNING id`
 	var id int
-	err := r.db.QueryRow(query, c.City, c.Country, c.Latitude, c.Longitude).Scan(&id)
+	err := r.db.QueryRow(query, c.Name, c.Country, c.Latitude, c.Longitude).Scan(&id)
 	if err != nil {
 		logger.Error("Ошибка при добавлении города", zap.Error(err))
 		return c, err
@@ -34,10 +35,30 @@ func (r *cityRepo) AddCity(c model.City) (model.City, error) {
 	return c, nil
 }
 
-// GetAllCity Получить все города
-func (r *cityRepo) GetAllCity() ([]model.City, error) {
+// GetAllCitiesWithForecast Получить все города
+func (r *cityRepo) GetAllCitiesWithForecast() (model.CityList, error) {
+	var cityNames []string
+	// Уникальные города, которые имеют предсказание погоды в отсортированном порядке
+	query := `
+		SELECT DISTINCT p.name
+		FROM city p
+		JOIN weather w ON p.id = w.city_id
+		ORDER BY p.name
+	`
+	err := r.db.Select(&cityNames, query)
+	if err != nil {
+		return model.CityList{}, err
+	}
+	return model.CityList{Cities: cityNames}, nil
+}
+
+func (r *cityRepo) GetAllCities() ([]model.City, error) {
 	var cities []model.City
-	err := r.db.Select(&cities, "SELECT * FROM place ORDER BY city")
+
+	query := `
+		SELECT * FROM city 
+	`
+	err := r.db.Select(&cities, query)
 	if err != nil {
 		return nil, err
 	}

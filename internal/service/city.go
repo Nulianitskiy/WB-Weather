@@ -7,7 +7,7 @@ import (
 
 type CityService interface {
 	AddCity(c model.City) (model.City, error)
-	GetCity() ([]model.City, error)
+	GetCities() (model.CityList, error)
 }
 
 type cityService struct {
@@ -22,6 +22,6 @@ func (s *cityService) AddCity(c model.City) (model.City, error) {
 	return s.repo.AddCity(c)
 }
 
-func (s *cityService) GetCity() ([]model.City, error) {
-	return s.repo.GetAllCity()
+func (s *cityService) GetCities() (model.CityList, error) {
+	return s.repo.GetAllCitiesWithForecast()
 }
